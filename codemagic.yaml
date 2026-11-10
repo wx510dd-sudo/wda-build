@@ -1,0 +1,27 @@
+workflows:
+  mirrortouch:
+    name: Build MirrorTouch
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    environment:
+      xcode: latest
+    scripts:
+      - name: Build and sign
+        script: |
+          set -e
+          brew install ldid
+          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          mkdir -p Payload/MirrorTouch.app
+          clang -arch arm64 -miphoneos-version-min=14.0 -isysroot "$SDK" \
+            -fobjc-arc -O2 -framework UIKit -framework Foundation \
+            -framework AVFoundation -framework IOKit -framework CoreFoundation \
+            -o Payload/MirrorTouch.app/touchd main.m
+          cp Info.plist Payload/MirrorTouch.app/
+          chmod +x Payload/MirrorTouch.app/touchd
+          ldid -S entitlements.plist Payload/MirrorTouch.app/touchd
+          ldid -e Payload/MirrorTouch.app/touchd
+          ldid -e Payload/MirrorTouch.app/touchd | grep -q event-dispatch
+          zip -qry MirrorTouch.ipa Payload
+          ls -lh MirrorTouch.ipa
+    artifacts:
+      - MirrorTouch.ipa
