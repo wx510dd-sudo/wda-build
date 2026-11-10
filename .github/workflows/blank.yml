@@ -1,0 +1,60 @@
+name: Build WebDriverAgent IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      wda_ref:
+        description: 'WebDriverAgent version tag'
+        required: true
+        default: 'v8.12.2'
+      bundle_id:
+        description: 'Runner bundle id (must be unique)'
+        required: true
+        default: 'com.wx510dd.wda.runner'
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: checkout wda
+        uses: actions/checkout@v4
+        with:
+          repository: appium/WebDriverAgent
+          ref: ${{ inputs.wda_ref }}
+          path: wda
+
+      - name: show xcode version
+        run: xcodebuild -version
+
+      - name: build for testing
+        working-directory: wda
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project WebDriverAgent.xcodeproj \
+            -scheme WebDriverAgentRunner \
+            -destination generic/platform=iOS \
+            -derivedDataPath ./DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            PRODUCT_BUNDLE_IDENTIFIER="${{ inputs.bundle_id }}" \
+            | tail -40
+
+      - name: package ipa
+        working-directory: wda
+        run: |
+          APP=$(find DerivedData/Build/Products -maxdepth 2 -name "WebDriverAgentRunner-Runner.app" -type d | head -1)
+          echo "found app: $APP"
+          if [ -z "$APP" ]; then echo "build product not found"; exit 1; fi
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qr WebDriverAgentRunner.ipa Payload
+          ls -lh WebDriverAgentRunner.ipa
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebDriverAgentRunner-ipa
+          path: wda/WebDriverAgentRunner.ipa
+          if-no-files-found: error
